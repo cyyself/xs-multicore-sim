@@ -2,8 +2,8 @@
 
 import json
 from pathlib import Path
-import sys
 import os
+import argparse
 from sv_util import *
 
 def read_hierachy(filename: Path):
@@ -114,4 +114,7 @@ def do_partition(vsrc_path: Path, partitioned_path: Path, target_module: str, io
         with open(partitioned_path / Path(module_name + '.sv'), 'w') as f:
             f.write(module.mf.__str__())
 
-do_partition(Path('vsrc'), Path('partitioned'), 'XSCore', '{}_{}_')
+parser = argparse.ArgumentParser(description='Partition Verilog by Module Name')
+parser.add_argument("-t", "--target", type=str, help="Target module name")
+args = parser.parse_args()
+do_partition(Path('vsrc'), Path('partitioned'), args.target, '{}_{}_')
