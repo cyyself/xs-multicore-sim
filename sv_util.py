@@ -78,6 +78,22 @@ class module_io_def:
         ret += ',' if not dot else ''
         ret += '\t//' + self.annotation if self.annotation != '' else ''
         return ret
+    def verilator_str(self, prefix: str = '', no_dir: bool = False):
+        dir_str = 'SIG' if no_dir else ('IN' if self.iotype == 'input' else 'OUT')
+        sig_length_str = ''
+        optional = ''
+        if self.width > 64:
+            sig_length_str = 'W'
+            optional = ',{}'.format((self.width + 31) // 32)
+        elif self.width > 32:
+            sig_length_str = '64'
+        elif self.width > 16:
+            sig_length_str = ''
+        elif self.width > 8:
+            sig_length_str = '16'
+        else:
+            sig_length_str = '8'
+        return "VL_{}{}({},{},0{})".format(dir_str, sig_length_str, prefix + self.name, self.width - 1, optional)
     def rename(self, new_name: str):
         return module_io_def(self.iotype, self.width, self.name_indent, new_name, self.annotation)
     def rename_by_prefix(self, prefix: str):
@@ -132,6 +148,57 @@ class module_def:
         return [head] + io_str + [');']
     def __str__(self):
         return "\n".join(self.gen_list_str())
+    def gen_io_struct_header(self, top_name: str, nr_inst: int, top_prefix: str, mask_peek_poke: set[str] = {}):
+        top_prefix = top_prefix.format(self.module_name, "##idx##")
+        buf = f'''
+#ifndef __MODULE_{self.module_name}_IO_H__
+#define __MODULE_{self.module_name}_IO_H__
+
+#include "V{self.module_name}.h"
+#include "V{top_name}.h"
+
+struct module_{self.module_name}_io {{
+{chr(10).join([f"    {each_io.verilator_str('*')}; " for each_io in self.io_list])}
+    module_{self.module_name}_io();
+    module_{self.module_name}_io(V{self.module_name} *module);
+    void poke_from(module_{self.module_name}_io *src);
+    void peek_to(module_{self.module_name}_io *dst);
+}};
+
+void connect_{self.module_name}_to_top(module_{self.module_name}_io **array_of_struct, V{top_name} *top);
+
+#endif
+'''.strip()+"\n"
+        return buf
+    def gen_io_struct_c(self, top_name: str, nr_inst: int, top_prefix: str, mask_peek_poke: set[str] = {}):
+        top_prefix = top_prefix.format(self.module_name, "##idx##")
+        buf = f'''
+#include "module_{self.module_name}_io.h"
+
+module_{self.module_name}_io::module_{self.module_name}_io() {{
+}}
+
+module_{self.module_name}_io::module_{self.module_name}_io(V{self.module_name} *module) {{
+{chr(10).join([f"    {each_io.name} = &(module->{each_io.name});" for each_io in self.io_list])}
+}}
+
+void module_{self.module_name}_io::poke_from(module_{self.module_name}_io *src) {{
+{chr(10).join([ f"        *{io.name} = *src->{io.name};" for io in self.io_list if io.iotype == 'input' and io.name not in mask_peek_poke])}
+}}
+
+void module_{self.module_name}_io::peek_to(module_{self.module_name}_io *dst) {{
+{chr(10).join([ f"        *dst->{io.name} = *{io.name};" for io in self.io_list if io.iotype == 'output' and io.name not in mask_peek_poke])}
+}}
+
+void connect_{self.module_name}_to_top(module_{self.module_name}_io **array_of_struct, V{top_name} *top) {{
+    #define connect_one(idx) do {{ {chr(92)}
+{chr(10).join([ f"        array_of_struct[(idx)]->{each_io.name} = &(top->{top_prefix}{each_io.name}); " + chr(92) for each_io in self.io_list])}
+    }} while(0);
+{chr(10).join([f"    connect_one({i});" for i in range(nr_inst)])}
+    #undef connect_one
+}}
+'''.strip()+"\n"
+        return buf
     def test():
         str = [
             'module XSCore(	// src/main/scala/xiangshan/XSCore.scala:155:7',

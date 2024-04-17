@@ -34,7 +34,15 @@ class module_def:
         # count is how many target module instance in this module
         # we should do dfs and add each instance which has path to target to the count
 
-def do_partition(vsrc_path: Path, partitioned_path: Path, target_module: str, io_format: str = '{}_{}'):
+def write_to_file(filename: Path, content: str):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            if f.read() == content:
+                return
+    with open(filename, 'w') as f:
+        f.write(content)
+
+def do_partition(vsrc_path: Path, partitioned_path: Path, target_module: str, io_format: str = '{}_{}_', header_path: str = '', mask_io: list[str] = []):
     # read modules
     modules: dict[module_def] = dict()
     for file in os.listdir(vsrc_path):
@@ -110,11 +118,18 @@ def do_partition(vsrc_path: Path, partitioned_path: Path, target_module: str, io
         if curr_module.count == 0:
             curr_module.count = -1 # mark as visited but no path
     do_partition_dfs(hier, target_module)
+    if header_path != '':
+        write_to_file(header_path + "/module_{}_io.h".format(target_module),
+                      target_def.gen_io_struct_header(hier['module_name'], modules[hier['module_name']].count, io_format, set(mask_io)) + "\n")
+        write_to_file(header_path + "/module_{}_io.cpp".format(target_module),
+                      target_def.gen_io_struct_c(hier['module_name'], modules[hier['module_name']].count, io_format, set(mask_io)) + "\n")
     for module_name, module in modules.items():
-        with open(partitioned_path / Path(module_name + '.sv'), 'w') as f:
-            f.write(module.mf.__str__())
+        content_to_write = module.mf.__str__() + "\n"
+        write_to_file(partitioned_path / Path(module_name + '.sv'), content_to_write)
 
 parser = argparse.ArgumentParser(description='Partition Verilog by Module Name')
-parser.add_argument("-t", "--target", type=str, help="Target module name")
+parser.add_argument("-t", "--target", type=str, help="Target module name", required=True)
+parser.add_argument("-d", "--directory", type=str, help="Header and C save path", required=False, default='')
+parser.add_argument("-m", "--mask", type=str, help="Mask io on target module when do peek or poke", required=False, action="extend", default=[], nargs='*')
 args = parser.parse_args()
-do_partition(Path('vsrc'), Path('partitioned'), args.target, '{}_{}_')
+do_partition(Path('vsrc'), Path('partitioned'), args.target, '{}_{}_', args.directory, args.mask)
