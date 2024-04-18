@@ -157,6 +157,8 @@ class module_def:
 #include "V{self.module_name}.h"
 #include "V{top_name}.h"
 
+#define XS_NR_INST {nr_inst}
+
 struct module_{self.module_name}_io {{
 {chr(10).join([f"    {each_io.verilator_str('*')}; " for each_io in self.io_list])}
     module_{self.module_name}_io();

@@ -8,11 +8,11 @@ int main(int argc, char** argv, char** env) {
     Verilated::traceEverOn(true);
 
     VXSTop* top = new VXSTop;
-    VXSTile* tile[NR_TILES];
-    module_XSTile_io *tileIO[NR_TILES];
-    module_XSTile_io **tileIO_to_top = new module_XSTile_io*[NR_TILES];
+    VXSTile* tile[XS_NR_INST];
+    module_XSTile_io *tileIO[XS_NR_INST];
+    module_XSTile_io **tileIO_to_top = new module_XSTile_io*[XS_NR_INST];
 
-    for(int i = 0; i < NR_TILES; i++) {
+    for(int i=0; i<XS_NR_INST; i++) {
         tile[i] = new VXSTile;
         tileIO[i] = new module_XSTile_io(tile[i]);
         tileIO_to_top[i] = new module_XSTile_io;
@@ -29,7 +29,7 @@ int main(int argc, char** argv, char** env) {
         top->eval();
         if (top->io_clock) {
             // posedge
-            for (int i=0;i<NR_TILES;i++) {
+            for (int i=0; i<XS_NR_INST; i++) {
                 *(tileIO[i]->reset) = top->io_reset;
                 *(tileIO[i]->clock) = top->io_clock;
                 tileIO[i]->poke_from(tileIO_to_top[i]);
@@ -38,7 +38,7 @@ int main(int argc, char** argv, char** env) {
             }
         }
         else {
-            for (int i=0;i<NR_TILES;i++) {
+            for (int i=0; i<XS_NR_INST; i++) {
                 *tileIO[i]->reset = top->io_reset;
                 *tileIO[i]->clock = top->io_clock;
                 tile[i]->eval();
