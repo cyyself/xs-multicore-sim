@@ -1,0 +1,3 @@
+[submodule "deps/soc-simulator"]
+	path = deps/soc-simulator
+	url = https://github.com/cyyself/soc-simulator.git

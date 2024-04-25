@@ -1,6 +1,7 @@
 XS_RTL_DIR := ../XiangShan/build/rtl
 PARTITION_MODULE := XSTile
-VERILATOR_ARGS := --cc --trace-fst -Wno-fatal --CFLAGS "-Os" -j `nproc` --threads 8
+SOC_SIMULATOR_SRC := $(realpath deps/soc-simulator/src)
+VERILATOR_ARGS := --cc --trace-fst -Wno-fatal --CFLAGS "-Os -I$(SOC_SIMULATOR_SRC) -std=c++20" -j `nproc` --threads 8
 FIRTOOL_ARGS := --disable-annotation-unknown --split-verilog --dedup --annotation-file=hier-anno.json --export-module-hierarchy --lowering-options="emittedLineLength=30000"
 
 obj_dir/VXSTop: partitioned/XSTop.sv csrc/main.cpp obj_dir/libV$(PARTITION_MODULE).a obj_dir/module_XSTile_io.cpp
