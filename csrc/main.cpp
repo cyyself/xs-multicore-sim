@@ -7,6 +7,7 @@
 #include "module_XSTile_io.h"
 #include "axi4_ctrl.hpp"
 #include "mmio_mem.hpp"
+#include "uartlite.hpp"
 #ifdef VM_TRACE_FST
 bool enable_wavedump = true;
 #endif
@@ -92,18 +93,25 @@ int main(int argc, char** argv, char** env) {
     VXSTop* top = new VXSTop;
     VXSTile* tile[XS_NR_INST];
     module_XSTile_io *tileIO[XS_NR_INST];
-    module_XSTile_io **tileIO_to_top = new module_XSTile_io*[XS_NR_INST];
-    for(int i=0; i<XS_NR_INST; i++) {
-        tile[i] = new VXSTile;
-        tileIO[i] = new module_XSTile_io(tile[i]);
-        tileIO_to_top[i] = new module_XSTile_io;
+    module_XSTile_io *tileIO_to_top[XS_NR_INST];
+    for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+        tile[tile_idx] = new VXSTile;
+        tileIO[tile_idx] = new module_XSTile_io(tile[tile_idx]);
+        tileIO_to_top[tile_idx] = new module_XSTile_io;
+        tile[tile_idx]->reset = 1;
+        tile[tile_idx]->io_hartId = tile_idx;
     }
     connect_XSTile_to_top(tileIO_to_top, top);
 #ifdef VM_TRACE_FST
-    VerilatedFstC fst;
+    VerilatedFstC fst_top;
+    VerilatedFstC fst_tile[XS_NR_INST];
     // connect fst for trace
-    top->trace(&fst,0);
-    fst.open("trace.fst");
+    top->trace(&fst_top,0);
+    fst_top.open("top.fst");
+    for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+        tile[tile_idx]->trace(&fst_tile[tile_idx],0);
+        fst_tile[tile_idx].open(std::string("tile_" + std::to_string(tile_idx) + ".fst").c_str());
+    }
 #endif
     // memory
     mmio_mem mem(0x80000000, "../simple-sw-workbench/start.bin");
@@ -118,16 +126,38 @@ int main(int argc, char** argv, char** env) {
     axi4_ptr_t peripheral_0_port_buf(31, 64, 2);
 
     axi4_ctrl memory_0_ctrl;
-    memory_0_ctrl.add_dev(0x00000000, 0x80000000, &mem);
+    memory_0_ctrl.add_dev(0x80000000, 0x80000000, &mem);
     axi4_ctrl peripheral_0_ctrl;
-    
+    uartlite uart;
+    peripheral_0_ctrl.add_dev(0x30000000, 16, &uart);
+
     top->io_clock = 0;
-    top->io_reset = 0;
+    top->io_reset = 1;
     top->io_riscv_rst_vec_0 = 0x80000000;
     top->io_riscv_rst_vec_1 = 0x80000000;
+    for (int rst_clk=0; rst_clk<10; rst_clk++) {
+        top->io_clock = !top->io_clock;
+        top->eval();
+        for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+            *tileIO[tile_idx]->clock = !*tileIO[tile_idx]->clock;
+            tileIO[tile_idx]->poke_from(tileIO_to_top[tile_idx]);
+            tile[tile_idx]->eval();
+            tileIO[tile_idx]->peek_to(tileIO_to_top[tile_idx]);
+            tile[tile_idx]->eval();
+        }
+#ifdef VM_TRACE_FST
+        if (enable_wavedump) {
+            fst_top.dump(rst_clk);
+            for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+                fst_tile[tile_idx].dump(rst_clk);
+            }
+        }
+#endif
+    }
+    top->io_reset = 0;
 
     uint64_t ticks = 0;
-    long max_ticks = 1000;
+    long max_ticks = 100000;
 
     while(ticks < max_ticks) {
         top->io_clock = !top->io_clock;
@@ -140,32 +170,49 @@ int main(int argc, char** argv, char** env) {
             peripheral_0_port_buf.update_output(peripheral_0_port);
             memory_0_port_buf.update_input(memory_0_port);
             peripheral_0_port_buf.update_input(peripheral_0_port);
-            for (int i=0; i<XS_NR_INST; i++) {
-                *(tileIO[i]->reset) = top->io_reset;
-                *(tileIO[i]->clock) = top->io_clock;
-                tileIO[i]->poke_from(tileIO_to_top[i]);
-                tile[i]->eval();
-                tileIO[i]->peek_to(tileIO_to_top[i]);
+            for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+                *(tileIO[tile_idx]->reset) = top->io_reset;
+                *(tileIO[tile_idx]->clock) = top->io_clock;
+                tileIO[tile_idx]->poke_from(tileIO_to_top[tile_idx]);
+                tile[tile_idx]->eval();
+                tileIO[tile_idx]->peek_to(tileIO_to_top[tile_idx]);
+                tile[tile_idx]->eval();
+            }
+            while (uart.exist_tx()) {
+                char c = uart.getc();
+                printf("%c", c);
+                fflush(stdout);
             }
         }
         else {
-            for (int i=0; i<XS_NR_INST; i++) {
-                *tileIO[i]->reset = top->io_reset;
-                *tileIO[i]->clock = top->io_clock;
-                tile[i]->eval();
+            for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+                *(tileIO[tile_idx]->reset) = top->io_reset;
+                *(tileIO[tile_idx]->clock) = top->io_clock;
+                tile[tile_idx]->eval();
             }
         }
 #ifdef VM_TRACE_FST
         if (enable_wavedump) {
-            fst.dump(ticks);
+            fst_top.dump(ticks+10);
+            for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+                fst_tile[tile_idx].dump(ticks+10);
+            }
         }
 #endif
         ticks ++;
     }
 
 #ifdef VM_TRACE_FST
-    if (enable_wavedump) fst.close();
+    if (enable_wavedump) {
+        fst_top.close();
+        for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+            fst_tile[tile_idx].close();
+        }
+    }
 #endif
     top->final();
+    for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
+        tile[tile_idx]->final();
+    }
     return 0;
 }
