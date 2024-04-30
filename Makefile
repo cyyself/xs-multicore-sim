@@ -14,7 +14,7 @@ obj_dir/libV$(PARTITION_MODULE).a: partitioned/$(PARTITION_MODULE).sv
 partitioned/XSTop.sv: vsrc/XSTop.sv partition.py
 	mkdir -p partitioned obj_dir
 	python3 partition.py -t $(PARTITION_MODULE) -d obj_dir -m clock
-	cp -u vsrc/STD_CLKGT_func.v partitioned/
+	cp -u vsrc/*.v partitioned/
 
 vsrc/XSTop.sv: $(XS_RTL_DIR)/XSTop.fir $(XS_RTL_DIR)/XSTop.v.conf 
 	mkdir -p vsrc
