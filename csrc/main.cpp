@@ -129,7 +129,7 @@ int main(int argc, char** argv, char** env) {
     memory_0_ctrl.add_dev(0x80000000, 0x80000000, &mem);
     axi4_ctrl peripheral_0_ctrl;
     uartlite uart;
-    peripheral_0_ctrl.add_dev(0x30000000, 16, &uart);
+    peripheral_0_ctrl.add_dev(0x40600000, 16, &uart);
 
     top->io_clock = 0;
     top->io_reset = 1;
