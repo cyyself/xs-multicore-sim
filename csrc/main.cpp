@@ -135,7 +135,10 @@ int main(int argc, char** argv, char** env) {
     top->io_reset = 1;
     top->io_riscv_rst_vec_0 = 0x80000000;
     top->io_riscv_rst_vec_1 = 0x80000000;
-    for (int rst_clk=0; rst_clk<10; rst_clk++) {
+
+    const int reset_ticks = 20;
+
+    for (int rst_clk=0; rst_clk<reset_ticks; rst_clk++) {
         top->io_clock = !top->io_clock;
         top->eval();
         for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
@@ -193,9 +196,9 @@ int main(int argc, char** argv, char** env) {
         }
 #ifdef VM_TRACE_FST
         if (enable_wavedump) {
-            fst_top.dump(ticks+10);
+            fst_top.dump(ticks+reset_ticks);
             for (int tile_idx=0; tile_idx<XS_NR_INST; tile_idx++) {
-                fst_tile[tile_idx].dump(ticks+10);
+                fst_tile[tile_idx].dump(ticks+reset_ticks);
             }
         }
 #endif
